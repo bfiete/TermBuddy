@@ -68,11 +68,31 @@ namespace TermBuddy
 
 			if (Paused)
 				Paused = false;
+		}
+
+		public override void KeyChar(char32 c)
+		{
+			base.KeyChar(c);
 
 			using (gApp.mMonitor.Enter())
 			{
-				gApp.mInData.Append(theString);
+				gApp.mInData.Append(c);
 			}
+		}
+
+		public override bool CheckReadOnly()
+		{
+			if (!mInserting)
+				return true;
+			return base.CheckReadOnly();
+		}
+
+		public override void PhysCursorMoved(CursorMoveKind moveKind)
+		{
+			base.PhysCursorMoved(moveKind);
+
+			if ((!mInserting) && (!Paused))
+				mPausePrevCursor = mData.mTextLength;
 		}
 
 		public override float DrawText(Graphics g, String str, float x, float y, uint16 typeIdAndFlags)
@@ -221,6 +241,7 @@ namespace TermBuddy
 				mButtons.Add(button);
 			}
 
+			AddButton("Workspace", new => gApp.DoWorkspace);
 			AddButton("Build", new => gApp.DoBuild);
 			AddButton("Flash", new => gApp.DoFlash);
 			AddButton("Monitor", new => gApp.DoMonitor);
@@ -231,6 +252,8 @@ namespace TermBuddy
 			AddButton("Verify", new => gApp.DoVerify);
 			AddButton("Reset", new => gApp.DoReset);
 			AddButton("Idle", new => gApp.DoIdle);
+			AddButton("Res Write", new => gApp.DoResWrite);
+			AddButton("Res Rewrite", new => gApp.DoResRewrite);
 		}
 	
 		public override void Draw(Graphics g)
@@ -261,11 +284,19 @@ namespace TermBuddy
 		{
 			float statusBarHeight = 20;
 			float btnHeight = 24;
-			mDocEdit.Resize(0, 0, mWidth, mHeight - btnHeight - statusBarHeight);
+
+			float btnWidth = 120;
+
+			int colSize = (.)(mWidth / btnWidth);
+			int numRows = (mButtons.Count + colSize - 1) / colSize;
+
+			//btnWidth = (mWidth - 2) / colSize;
+
+			mDocEdit.Resize(0, 0, mWidth, mHeight - btnHeight * numRows - statusBarHeight);
 
 			for (int i < mButtons.Count)
 			{
-				mButtons[i].Resize(2 + i * 120, mHeight - statusBarHeight - btnHeight, 120, btnHeight);
+				mButtons[i].Resize(2 + (i % colSize) * btnWidth, mHeight - statusBarHeight - btnHeight*numRows + (i / colSize)*(btnHeight), btnWidth, btnHeight);
 			}
 
 			mStatusBar.Resize(0, mHeight - statusBarHeight, mWidth, statusBarHeight);

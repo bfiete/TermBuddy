@@ -81,7 +81,9 @@ namespace TermBuddy
 		public class PendingInData
 		{
 			public String mData ~ delete _;
-			public int mDelay;
+			public int32 mDelay;
+			public bool mAwaitingContinue;
+			public int32 mPrevSend;
 		}
 
 		public WidgetWindow mMainWindow;
@@ -96,11 +98,13 @@ namespace TermBuddy
 		public Thread mInputThread ~ delete _;
 		public Thread mComReadThread ~ delete _;
 		public Thread mComWriteThread ~ delete _;
+		public int32 mBytesSent;
 		public bool mPendingMonitor;
 		public ViewMode mViewMode;
 		public Windows.FileHandle mComHandle;
 		public bool mHadError;
 		public String mProgramFilePath = new .() ~ delete _;
+		public String mResFilePath = new .() ~ delete _;
 		public List<PendingInData> mPendingInData = new .() ~ delete _;
 		public List<uint8> mVerifyData ~ delete _;
 		public List<uint8> mReadProgramData ~ delete _;
@@ -129,7 +133,10 @@ namespace TermBuddy
 		{
 			mComHandle = Windows.CreateFileA("\\\\.\\COM3", Windows.GENERIC_READ | Windows.GENERIC_WRITE, 0, null, .Open, 0x00000080, default);
 			if (mComHandle.IsInvalid)
+			{
+				Fail("Failed to open COM3");
 				return;
+			}
 
 			DCB dcb = .();
 			GetCommState(mComHandle, out dcb);
@@ -153,6 +160,8 @@ namespace TermBuddy
 			timeouts.WriteTotalTimeoutMultiplier = 1;
 			timeouts.WriteTotalTimeoutConstant = 1;
 			SetCommTimeouts(mComHandle, ref timeouts);
+
+			mBytesSent = 0;
 		}
 
 		void CloseCom()
@@ -287,10 +296,12 @@ namespace TermBuddy
 
 		public void ClearOutput()
 		{
+			mBoard.mContent.mInserting = true;
 			mBoard.mContent.Paused = false;
 			mBoard.mContent.ClearText();
 			mBoard.mContent.mContentCursorPos = 0;
 			mBoard.mContent.CursorTextPos = 0;
+			mBoard.mContent.mInserting = false;
 			mOutputData.Clear();
 		}
 
@@ -301,6 +312,7 @@ namespace TermBuddy
 			mInData.Clear();
 			mPendingInData.ClearAndDeleteItems();
 			mOutputLineData.Clear();
+			mBytesSent = 0;
 		}
 
 		void SpawnIDF(String cmds)
@@ -379,6 +391,17 @@ namespace TermBuddy
 			Fail(errStr);
 		}
 
+		public void DoWorkspace()
+		{
+			FolderBrowserDialog dialog = scope .();
+			dialog.SelectedPath = Directory.GetCurrentDirectory(.. scope .());
+			if (dialog.ShowDialog() case .Err)
+				return;
+
+			if (!dialog.SelectedPath.IsEmpty)
+				Directory.SetCurrentDirectory(dialog.SelectedPath).IgnoreError();
+		}
+
 		public void DoBuild()
 		{
 			SpawnIDF("idf.py build");
@@ -394,6 +417,7 @@ namespace TermBuddy
 			mViewMode = .Monitor;
 			ResetConsole();
 
+			CloseCom();
 			OpenCom();
 		}
 
@@ -422,6 +446,81 @@ namespace TermBuddy
 			return true;
 		}
 
+		public void FlashWrite(StringView kind, List<uint8> data)
+		{
+			int32 hash = 0;
+			for (int i < data.Count)
+				Hash(data[i], ref hash);
+
+			int pendingLength = 0;
+
+			PendingInData pendingInData = new .();
+			mPendingInData.Add(pendingInData);
+			pendingInData.mData = new String();
+			pendingInData.mAwaitingContinue = true;
+
+			void Enc(char8 c)
+			{
+				pendingInData.mData.Append(c);
+			}
+
+			int zeroCount = 0;
+			void FlushZeros()
+			{
+				while (zeroCount > 0)
+				{
+					int encodeZero = Math.Min(zeroCount, 39);
+					Enc('!' + encodeZero);
+					zeroCount -= encodeZero;
+				}
+			}
+
+			bool doCompress = true;
+			for (int i < data.Count)
+			{
+				uint8 val = data[i];
+				if ((val == 0) && (doCompress))
+				{
+					zeroCount++;
+				}
+				else
+				{
+					FlushZeros();
+					if ((val & 0xF0 == 0) && (doCompress))
+					{
+						Enc('Y' + (val & 0x0F));
+					}
+					else if ((val & 0x0F == 0) && (doCompress))
+					{
+						Enc('i' + (val>>4));
+					}
+					else
+					{
+						Enc('I' + (val & 0x0F));
+						Enc('I' + (val >> 4));
+					}
+				}
+
+				//if (pendingInData.mData.Length > 0x10000 - 4)
+				if (pendingInData.mData.Length > 25000)
+				{
+					pendingInData.mData.Append('z');
+					int32 prevSend = (.)pendingInData.mData.Length;
+					pendingLength += pendingInData.mData.Length;
+					pendingInData = new .();
+					mPendingInData.Add(pendingInData);
+					pendingInData.mData = new String();
+					pendingInData.mAwaitingContinue = true;
+					pendingInData.mPrevSend = prevSend;
+				}
+			}
+			FlushZeros();
+			pendingInData.mData.Append('z');
+			pendingLength += pendingInData.mData.Length;
+
+			mInData.AppendF($":{kind} {data.Count} {pendingLength} {hash}\n");
+		}
+
 		public void DoProgram()
 		{
 			if (!GetProgramPath())
@@ -433,17 +532,13 @@ namespace TermBuddy
 
 		public void DoReprogram()
 		{
-			/*{
-				mInData.AppendF($":PROGRAM 6\n");
-				mInData.Append("ABCDEF");
-				return;
-			}*/
-
 			if (mProgramFilePath.IsEmpty)
 			{
 				DoProgram();
 				return;
 			}
+
+			mBoard.mContent.Paused = false;
 
 			List<uint8> data = scope .();
 			if (File.ReadAll(mProgramFilePath, data) case .Err)
@@ -452,23 +547,55 @@ namespace TermBuddy
 				return;
 			}
 
-			int32 hash = 0;
-			for (int i < data.Count)
-				Hash(data[i], ref hash);
+			FlashWrite("PROGRAM", data);
+		}
 
-			mInData.AppendF($":PROGRAM {data.Count} {hash}\n");
+		public bool GetResPath()
+		{
+			if (mViewMode != .Monitor)
+				DoMonitor();
 
-			PendingInData pendingInData = new .();
-			pendingInData.mData = new String();
-			pendingInData.mDelay = 40;
-			for (int i < data.Count)
-				pendingInData.mData.AppendF($"{data[i]:X2}");
+			var dialog = scope OpenFileDialog();
+			dialog.SetFilter("All files (*.*)|*.*");
+			dialog.InitialDirectory = mInstallDir;
+			dialog.Title = "Open Resource";
+			let result = dialog.ShowDialog();
+			if ((result case .Err) || (dialog.FileNames.Count == 0))
+			{
+				return false;
+			}
 
-			//pendingInData.mData.RemoveFromEnd(3);
+			mResFilePath.Set(dialog.FileNames[0]);
+			return true;
+		}
 
-			mPendingInData.Add(pendingInData);
+		public void DoResWrite()
+		{
+			if (!GetResPath())
+				return;
+			if (mResFilePath.IsEmpty)
+				return;
+			DoResRewrite();
+		}
 
-			//mInData.Append(StringView((.)data.Ptr, data.Count));
+		public void DoResRewrite()
+		{
+			if (mResFilePath.IsEmpty)
+			{
+				DoResWrite();
+				return;
+			}
+
+			mBoard.mContent.Paused = false;
+
+			List<uint8> data = scope .();
+			if (File.ReadAll(mResFilePath, data) case .Err)
+			{
+				Fail(scope $"Failed to read '{mResFilePath}'");
+				return;
+			}
+
+			FlashWrite("RESDATA", data);
 		}
 
 		public void DoReadProgram()
@@ -546,7 +673,7 @@ namespace TermBuddy
 			if (!mPendingInData.IsEmpty)
 			{
 				var pendingInData = mPendingInData.Front;
-				if (--pendingInData.mDelay <= 0)
+				if ((--pendingInData.mDelay <= 0) && (!pendingInData.mAwaitingContinue))
 				{
 					mInData.Append(pendingInData.mData);
 					delete pendingInData;
@@ -572,9 +699,14 @@ namespace TermBuddy
 
 				if ((!mInData.IsEmpty) && (mIsUpdateBatchStart))
 				{
-					result = Windows.WriteFile(mComHandle, (.)mInData.Ptr, (.)Math.Min(mInData.Length, 128), var numBytesWritten, null);
+					int32 len = (.)Math.Min(mInData.Length, 256);
+					//int32 len = (.)Math.Min(mInData.Length, 16);
+					result = Windows.WriteFile(mComHandle, (.)mInData.Ptr, len, var numBytesWritten, null);
 					if (result > 0)
+					{
+						mBytesSent += numBytesWritten;
 						mInData.Remove(0, numBytesWritten);
+					}
 				}
 			}
 
@@ -588,7 +720,26 @@ namespace TermBuddy
 				if (line.EndsWith('\r'))
 					line.RemoveFromEnd(1);
 
-				if (line.StartsWith(":READ SIZE "))
+				if (line.StartsWith(":CONTINUE"))
+				{
+					int32 prevSend = 0;
+					if (line.Contains(' '))
+						prevSend = int32.Parse(line.Substring(":CONTINUE ".Length)).GetValueOrDefault();
+
+					if (!mPendingInData.IsEmpty)
+					{
+						var pendingInData = mPendingInData.Front;
+						if ((pendingInData.mPrevSend != 0) && (pendingInData.mPrevSend != prevSend))
+						{
+							OutputText(scope $"FAILED TRANSFER: Receiver received {prevSend} bytes but expected {pendingInData.mPrevSend}\n");
+						}
+						else
+						{
+							pendingInData.mAwaitingContinue = false;
+						}
+					}
+				}
+				else if (line.StartsWith(":READ SIZE "))
 				{
 					//int 
 				}
@@ -611,18 +762,24 @@ namespace TermBuddy
 				{
 					if (mVerifyData != null)
 					{
-						bool matched = true;
+						String matchError = scope .();
 						if (mVerifyData.Count != mReadProgramData.Count)
-							matched = false;
+							matchError.Set(scope $"Expected {mVerifyData.Count} bytes but got {mReadProgramData.Count}");
 						else
 						{
 							for (int i < mVerifyData.Count)
 								if (mVerifyData[i] != mReadProgramData[i])
-									matched = false;
+								{
+									matchError.Set(scope $"Data mismatch at 0x{i:X}");
+									break;
+								}
 						}
 
-						if (!matched)
-							Fail("Verification failed");
+						if (!matchError.IsEmpty)
+						{
+							Fail(scope $"Verification failed: {matchError}\nRead data written to read.bin");
+							File.WriteAll("read.bin", mReadProgramData).IgnoreError();
+						}
 						DeleteAndNullify!(mVerifyData);
 					}
 					else if (mReadProgramData != null)
@@ -745,9 +902,7 @@ namespace TermBuddy
 
 						//Debug.WriteLine($"Inserting: {insertText}\n");
 
-						mBoard.mContent.mInserting = true;
-						mBoard.mContent.InsertAtCursor(scope .(insertText));
-						mBoard.mContent.mInserting = false;
+						OutputText(insertText);
 
 						//Debug.Write(mOutputData);
 						//Debug.Flush();
@@ -757,6 +912,13 @@ namespace TermBuddy
 					}
 				}
 			}
+		}
+
+		public void OutputText(StringView text)
+		{
+			mBoard.mContent.mInserting = true;
+			mBoard.mContent.InsertAtCursor(.. scope String()..Append(text));
+			mBoard.mContent.mInserting = false;
 		}
 
 		public void Fail(String text)

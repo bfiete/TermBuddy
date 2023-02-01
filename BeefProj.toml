@@ -12,7 +12,7 @@ IconFile = "res/TermBuddy.ico"
 [Configs.Debug.Win64]
 TargetDirectory = "$(WorkspaceDir)/dist"
 TargetName = "$(ProjectName)_d"
-OtherLinkFlags = "Comdlg32.lib kernel32.lib user32.lib advapi32.lib shell32.lib IDEHelper64_d.lib BeefySysLib64_d.lib $(LinkFlags)"
+OtherLinkFlags = "Comdlg32.lib kernel32.lib user32.lib advapi32.lib shell32.lib $(LinkFlags)"
 BeefLibType = "DynamicDebug"
 DebugWorkingDirectory = "c:\\proj\\ClockBuddy"
 
