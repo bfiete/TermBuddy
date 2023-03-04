@@ -21,63 +21,6 @@ namespace TermBuddy
 			Monitor
 		}
 
-		[CRepr]
-		struct DCB
-		{
-		    public uint32 DCBlength = sizeof(DCB);      /* sizeof(DCB)                     */
-		    public uint32 BaudRate;       /* Baudrate at which running       */
-		    //uint32 fBinary: 1;     /* Binary Mode (skip EOF check)    */
-		    //uint32 fParity: 1;     /* Enable parity checking          */
-		    //uint32 fOutxCtsFlow:1; /* CTS handshaking on output       */
-		    //uint32 fOutxDsrFlow:1; /* DSR handshaking on output       */
-		    //uint32 fDtrControl:2;  /* DTR Flow control                */
-		    //uint32 fDsrSensitivity:1; /* DSR Sensitivity              */
-		    //uint32 fTXContinueOnXoff: 1; /* Continue TX when Xoff sent */
-		    //uint32 fOutX: 1;       /* Enable output X-ON/X-OFF        */
-		    //uint32 fInX: 1;        /* Enable input X-ON/X-OFF         */
-		    //uint32 fErrorChar: 1;  /* Enable Err Replacement          */
-		    //uint32 fNull: 1;       /* Enable Null stripping           */
-		    //uint32 fRtsControl:2;  /* Rts Flow control                */
-		    //uint32 fAbortOnError:1; /* Abort all reads and writes on Error */
-		    //uint32 fDummy2:17;     /* Reserved                        */
-			[Bitfield(.Public, .Bits(1), "fBinary")]
-			[Bitfield(.Public, .Bits(1), "fParity")]
-			[Bitfield(.Public, .Bits(1), "fOutxCtsFlow")]
-			[Bitfield(.Public, .Bits(1), "fOutxDsrFlow")]
-			[Bitfield(.Public, .Bits(2), "fDtrControl")]
-			[Bitfield(.Public, .Bits(1), "fDsrSensitivity")]
-			[Bitfield(.Public, .Bits(1), "fTXContinueOnXoff")]
-			[Bitfield(.Public, .Bits(1), "fOutX")]
-			[Bitfield(.Public, .Bits(1), "fInX")]
-			[Bitfield(.Public, .Bits(1), "fErrorChar")]
-			[Bitfield(.Public, .Bits(1), "fNull")]
-			[Bitfield(.Public, .Bits(1), "fRtsControl")]
-			[Bitfield(.Public, .Bits(1), "fAbortOnError")]
-			public uint32 mFlags;
-		    public uint16 wReserved;       /* Not currently used              */
-		    public uint16 XonLim;          /* Transmit X-ON threshold         */
-		    public uint16 XoffLim;         /* Transmit X-OFF threshold        */
-		    public uint8 ByteSize;        /* Number of bits/byte, 4-8        */
-		    public uint8 Parity;          /* 0-4=None,Odd,Even,Mark,Space    */
-		    public uint8 StopBits;        /* 0,1,2 = 1, 1.5, 2               */
-		    public char8 XonChar;         /* Tx and Rx X-ON character        */
-		    public char8 XoffChar;        /* Tx and Rx X-OFF character       */
-		    public char8 ErrorChar;       /* Error replacement char          */
-		    public char8 EofChar;         /* End of Input character          */
-		    public char8 EvtChar;         /* Received Event character        */
-		    public uint16 wReserved1;      /* Fill for now.                   */
-		}
-
-		[CRepr]
-		struct COMMTIMEOUTS
-		{
-			public uint32 ReadIntervalTimeout;
-			public uint32 ReadTotalTimeoutMultiplier;
-			public uint32 ReadTotalTimeoutConstant;
-			public uint32 WriteTotalTimeoutMultiplier;
-			public uint32 WriteTotalTimeoutConstant;
-		}
-
 		public class PendingInData
 		{
 			public String mData ~ delete _;
@@ -101,7 +44,6 @@ namespace TermBuddy
 		public int32 mBytesSent;
 		public bool mPendingMonitor;
 		public ViewMode mViewMode;
-		public Windows.FileHandle mComHandle;
 		public bool mHadError;
 		public String mProgramFilePath = new .() ~ delete _;
 		public String mResFilePath = new .() ~ delete _;
@@ -109,69 +51,28 @@ namespace TermBuddy
 		public List<uint8> mVerifyData ~ delete _;
 		public List<uint8> mReadProgramData ~ delete _;
 		public String mOutputLineData = new .() ~ delete _;
+		public SerialPort mSerialPort ~ delete _;
 
 		public this()
 		{
 			gApp = this;
 		}
 
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 SetCommBreak(Windows.FileHandle handle);
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 ClearCommBreak(Windows.FileHandle handle);
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 EscapeCommFunction(Windows.FileHandle handle, uint32 func);
-
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 GetCommState(Windows.FileHandle handle, out DCB dcb);
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 SetCommState(Windows.FileHandle handle, ref DCB dcb);
-		[CLink, CallingConvention(.Stdcall)]
-		public static extern uint32 SetCommTimeouts(Windows.FileHandle handle, ref COMMTIMEOUTS timeouts);
-
 		void OpenCom()
 		{
-			mComHandle = Windows.CreateFileA("\\\\.\\COM3", Windows.GENERIC_READ | Windows.GENERIC_WRITE, 0, null, .Open, 0x00000080, default);
-			if (mComHandle.IsInvalid)
+			delete mSerialPort;
+			mSerialPort = new SerialPort();
+			if (mSerialPort.Open(3) case .Err)
 			{
 				Fail("Failed to open COM3");
 				return;
 			}
-
-			DCB dcb = .();
-			GetCommState(mComHandle, out dcb);
-
-			dcb = default;
-			dcb.DCBlength = 28;
-			dcb.BaudRate = 115200;
-			dcb.mFlags = 1;
-			dcb.XoffLim = 16384;
-			dcb.ByteSize = 8;
-			dcb.StopBits = 0;
-			dcb.Parity = 0;
-			dcb.XonChar = 0;
-			dcb.XoffChar = 0;
-			SetCommState(mComHandle, ref dcb);
-
-			COMMTIMEOUTS timeouts = default;
-			timeouts.ReadIntervalTimeout = 0xFFFFFFFF;
-			timeouts.ReadTotalTimeoutMultiplier = 0xFFFFFFFF;
-			timeouts.ReadTotalTimeoutConstant = 1;
-			timeouts.WriteTotalTimeoutMultiplier = 1;
-			timeouts.WriteTotalTimeoutConstant = 1;
-			SetCommTimeouts(mComHandle, ref timeouts);
-
-			mBytesSent = 0;
 		}
 
 		void CloseCom()
 		{
-			if (mComHandle.IsInvalid)
-				return;
-
-			Windows.CloseHandle(mComHandle);
-
-			mComHandle = default;
+			DeleteAndNullify!(mSerialPort);
+			mBytesSent = 0;
 		}
 
 		void ReadOutputThread()
@@ -632,10 +533,12 @@ namespace TermBuddy
 			ResetConsole();
 
 			//EscapeCommFunction(mComHandle, 5/*SETDTR*/);
-			EscapeCommFunction(mComHandle, 3/*SETRTS*/);
+			//EscapeCommFunction(mComHandle, 3/*SETRTS*/);
+			mSerialPort.RTS = true;
 			Thread.Sleep(20);
 			//EscapeCommFunction(mComHandle, 6/*CLRDTR*/);
-			EscapeCommFunction(mComHandle, 4/*CLRRTS*/);
+			//EscapeCommFunction(mComHandle, 4/*CLRRTS*/);
+			mSerialPort.RTS = false;
 		}
 
 		public void DoIdle()
@@ -681,11 +584,11 @@ namespace TermBuddy
 				}
 			}
 
-			if (!mComHandle.IsInvalid)
+			if (mSerialPort != null)
 			{
 				uint8[1024] data = ?;
-				int result = Windows.ReadFile(mComHandle, &data, data.Count, var numBytesRead, null);
-				if (result > 0)
+				int numBytesRead = mSerialPort.Read(data).GetValueOrDefault();
+				if (numBytesRead > 0)
 				{
 					if (mViewMode == .Monitor)
 					{
@@ -701,8 +604,11 @@ namespace TermBuddy
 				{
 					int32 len = (.)Math.Min(mInData.Length, 256);
 					//int32 len = (.)Math.Min(mInData.Length, 16);
-					result = Windows.WriteFile(mComHandle, (.)mInData.Ptr, len, var numBytesWritten, null);
-					if (result > 0)
+
+					int32 numBytesWritten = mSerialPort.Write(.((uint8*)mInData.Ptr, len)).GetValueOrDefault();
+					//result = Windows.WriteFile(mComHandle, (.)mInData.Ptr, len, var numBytesWritten, null);
+					//if (result > 0)
+					if (numBytesWritten > 0)
 					{
 						mBytesSent += numBytesWritten;
 						mInData.Remove(0, numBytesWritten);
