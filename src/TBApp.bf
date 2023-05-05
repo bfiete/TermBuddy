@@ -48,6 +48,7 @@ namespace TermBuddy
 		public String mProgramFilePath = new .() ~ delete _;
 		public String mResFilePath = new .() ~ delete _;
 		public List<PendingInData> mPendingInData = new .() ~ delete _;
+		public PendingInData mCurInData ~ delete _;
 		public List<uint8> mVerifyData ~ delete _;
 		public List<uint8> mReadProgramData ~ delete _;
 		public String mOutputLineData = new .() ~ delete _;
@@ -238,7 +239,8 @@ namespace TermBuddy
 			psi.SetFileName("cmd.exe");
 			//psi.SetArguments(@"/C C:\Espressif\frameworks\esp-idf-v4.4.2\tools\idf.py");
 
-			mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-e91d384503485fbb54f6ce3d11e841fe\n");
+			//mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-e91d384503485fbb54f6ce3d11e841fe\n");
+			mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-57b6d67bb026a1bc6f3a56f94687e2fe\n");
 
 			if (cmds != null)
 			{
@@ -254,6 +256,8 @@ namespace TermBuddy
 			base.Init();
 
 			//BeefPerf.Init("127.0.0.1", "TermBuddy");
+
+			var cwd = Directory.GetCurrentDirectory(.. scope .());
 
 			DarkTheme darkTheme = new DarkTheme();
 			darkTheme.Init();
@@ -272,7 +276,7 @@ namespace TermBuddy
 
 			mBoard = new Board();
 			//mBoard.Load(dialog.FileNames[0]);
-			mMainWindow = new WidgetWindow(null, "TermBuddy", 32, 32, 1024, 768, windowFlags, mBoard);
+			mMainWindow = new WidgetWindow(null, scope $"TermBuddy - {cwd}", 32, 32, 1024, 768, windowFlags, mBoard);
 			//mMainWindow.mWindowKeyDownDelegate.Add(new => SysKeyDown);
 			mMainWindow.SetMinimumSize(480, 360);
 			mMainWindow.mIsMainWindow = true;
@@ -403,7 +407,8 @@ namespace TermBuddy
 				}
 
 				//if (pendingInData.mData.Length > 0x10000 - 4)
-				if (pendingInData.mData.Length > 25000)
+				//if (pendingInData.mData.Length > 25000)
+				if (pendingInData.mData.Length > 4000)
 				{
 					pendingInData.mData.Append('z');
 					int32 prevSend = (.)pendingInData.mData.Length;
@@ -579,8 +584,10 @@ namespace TermBuddy
 				if ((--pendingInData.mDelay <= 0) && (!pendingInData.mAwaitingContinue))
 				{
 					mInData.Append(pendingInData.mData);
-					delete pendingInData;
 					mPendingInData.PopFront();
+
+					delete mCurInData;
+					mCurInData = pendingInData;
 				}
 			}
 
@@ -643,6 +650,14 @@ namespace TermBuddy
 						{
 							pendingInData.mAwaitingContinue = false;
 						}
+					}
+				}
+				else if (line.StartsWith(":RESEND"))
+				{
+					if (mCurInData != null)
+					{
+						mPendingInData.Insert(0, mCurInData);
+						delete mCurInData;
 					}
 				}
 				else if (line.StartsWith(":READ SIZE "))
