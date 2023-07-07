@@ -114,7 +114,7 @@ class SerialPort
 		dcb.DCBlength = 28;
 		dcb.BaudRate = (.)baudRate;
 		dcb.mFlags = 1;
-		dcb.XoffLim = 16384;
+		dcb.XoffLim = 512;
 		dcb.ByteSize = (.)byteSize;
 		dcb.StopBits = 0;
 		dcb.Parity = (.)parity;

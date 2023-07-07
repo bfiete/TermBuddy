@@ -309,7 +309,10 @@ namespace TermBuddy
 
 		public void DoBuild()
 		{
-			SpawnIDF("idf.py build");
+			if (File.Exists("build.bat"))
+				SpawnIDF("build.bat");
+			else
+				SpawnIDF("idf.py build");
 		}
 
 		public void DoFlash()
@@ -328,7 +331,10 @@ namespace TermBuddy
 
 		public void DoBuildAndMonitor()
 		{
-			SpawnIDF("idf.py -p COM3 build flash");
+			if (File.Exists("build.bat"))
+				SpawnIDF("build.bat\nidf.py -p COM3 flash");
+			else
+				SpawnIDF("idf.py -p COM3 build flash");
 			mPendingMonitor = true;
 		}
 
@@ -645,6 +651,9 @@ namespace TermBuddy
 						if ((pendingInData.mPrevSend != 0) && (pendingInData.mPrevSend != prevSend))
 						{
 							OutputText(scope $"FAILED TRANSFER: Receiver received {prevSend} bytes but expected {pendingInData.mPrevSend}\n");
+							mInData.Append('y'); // Resending block...
+							mPendingInData.Add(mCurInData);
+							mCurInData = null;
 						}
 						else
 						{
