@@ -414,6 +414,7 @@ namespace TermBuddy
 
 				//if (pendingInData.mData.Length > 0x10000 - 4)
 				//if (pendingInData.mData.Length > 25000)
+				//if (pendingInData.mData.Length > 4000)
 				if (pendingInData.mData.Length > 4000)
 				{
 					pendingInData.mData.Append('z');
@@ -543,6 +544,12 @@ namespace TermBuddy
 		{
 			ResetConsole();
 
+			if (mSerialPort == null)
+				OpenCom();
+
+			if (mSerialPort == null)
+				return;
+
 			//EscapeCommFunction(mComHandle, 5/*SETDTR*/);
 			//EscapeCommFunction(mComHandle, 3/*SETRTS*/);
 			mSerialPort.RTS = true;
@@ -631,6 +638,9 @@ namespace TermBuddy
 
 			while (true)
 			{
+				if (mBoard.mContent.Paused)
+					break;
+
 				int crPos = mOutputLineData.IndexOf('\n');
 				if (crPos == -1)
 					break;
@@ -652,11 +662,12 @@ namespace TermBuddy
 						{
 							OutputText(scope $"FAILED TRANSFER: Receiver received {prevSend} bytes but expected {pendingInData.mPrevSend}\n");
 							mInData.Append('y'); // Resending block...
-							mPendingInData.Add(mCurInData);
+							mPendingInData.Insert(0, mCurInData);
 							mCurInData = null;
 						}
 						else
 						{
+							//pendingInData.mDelay = 15;
 							pendingInData.mAwaitingContinue = false;
 						}
 					}
@@ -666,7 +677,7 @@ namespace TermBuddy
 					if (mCurInData != null)
 					{
 						mPendingInData.Insert(0, mCurInData);
-						delete mCurInData;
+						mCurInData = null;
 					}
 				}
 				else if (line.StartsWith(":READ SIZE "))

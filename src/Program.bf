@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 
 namespace TermBuddy
 {
@@ -6,9 +7,6 @@ namespace TermBuddy
 	{
 		static int32 Main(String[] args)
 		{
-			/*String commandLine = scope String();
-			commandLine.JoinInto(" ", args);*/						
-
 			TBApp app = new .();
 			app.ParseCommandLine(args);
 			app.Init();
