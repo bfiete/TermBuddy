@@ -57,6 +57,23 @@ namespace TermBuddy
 		{
 			if (mInserting)
 			{
+				if (theString.Length == 0)
+					return;
+
+				if (theString.Contains('\b'))
+				{
+					int backPos = theString.IndexOf('\b');
+					String substr = scope .();
+
+					substr.Set(theString.Substring(0, backPos));
+					InsertAtCursor(substr, insertFlags);
+
+					Backspace();
+
+					substr.Set(theString.Substring(backPos + 1));
+					InsertAtCursor(substr, insertFlags);
+				}
+
 				int prevPos = CursorTextPos;
 				base.InsertAtCursor(theString, insertFlags);
 				for (int i = prevPos; i <= CursorTextPos; i++)
