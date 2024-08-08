@@ -240,7 +240,8 @@ namespace TermBuddy
 			//psi.SetArguments(@"/C C:\Espressif\frameworks\esp-idf-v4.4.2\tools\idf.py");
 
 			//mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-e91d384503485fbb54f6ce3d11e841fe\n");
-			mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-57b6d67bb026a1bc6f3a56f94687e2fe\n");
+			//mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-57b6d67bb026a1bc6f3a56f94687e2fe\n");
+			mInData.Append("\"C:\\Espressif\\idf_cmd_init.bat\" esp-idf-7a538bcf490d7cccefdf2fcb09abae4f\n"); // 4.4.6
 
 			if (cmds != null)
 			{
