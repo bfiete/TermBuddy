@@ -14,7 +14,7 @@ TargetDirectory = "$(WorkspaceDir)/dist"
 TargetName = "$(ProjectName)_d"
 OtherLinkFlags = "Comdlg32.lib kernel32.lib user32.lib advapi32.lib shell32.lib $(LinkFlags)"
 BeefLibType = "DynamicDebug"
-DebugWorkingDirectory = "c:\\proj\\BikeGame"
+DebugWorkingDirectory = "c:\\temp\\ESPDispTest"
 
 [Configs.Release.Win64]
 TargetDirectory = "$(WorkspaceDir)/dist"

@@ -37,8 +37,8 @@ namespace TermBuddy
 			{
 				if ((!value) && (mPausePrevCursor != null))
 				{
-					mSelection = null;
-					mCursorTextPos = mPausePrevCursor.Value;
+					CurSelection = null;
+					CursorTextPos = mPausePrevCursor.Value;
 					mPausePrevCursor = null;
 				}
 			}
@@ -149,7 +149,7 @@ namespace TermBuddy
 
 		public override void MouseDown(float x, float y, int32 btn, int32 btnCount)
 		{
-			int32 startingCursorPos = mCursorTextPos;
+			int32 startingCursorPos = (.)CursorTextPos;
 			if (btn != 0)
 			{
 				if (btn == 1)
@@ -170,7 +170,7 @@ namespace TermBuddy
 			}
 
 			base.MouseDown(x, y, btn, btnCount);
-			if ((btn == 0) && (mCursorTextPos != startingCursorPos))
+			if ((btn == 0) && (CursorTextPos != startingCursorPos))
 			{
 				if (!Paused)
 					mPausePrevCursor = startingCursorPos;

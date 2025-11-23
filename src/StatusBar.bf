@@ -1,6 +1,7 @@
 using Beefy.widgets;
 using Beefy.gfx;
 using System.IO;
+using System;
 
 namespace TermBuddy
 {
@@ -39,11 +40,11 @@ namespace TermBuddy
 				g.DrawString(curDir, 8, 2);
 			}
 
-			g.DrawString(StackStringFormat!("Bytes Sent {0}", gApp.mBytesSent), mWidth - 340, 2);
+			g.DrawString(scope:: String()..AppendF("Bytes Sent {0}", gApp.mBytesSent), mWidth - 340, 2);
 
 			var lineAndColumn = gApp.mBoard.mDocEdit.mEditWidgetContent.CursorLineAndColumn;
-			g.DrawString(StackStringFormat!("Ln {0}", lineAndColumn.mLine + 1), mWidth - 160, 2);
-			g.DrawString(StackStringFormat!("Col {0}", lineAndColumn.mColumn + 1), mWidth - 80, 2);
+			g.DrawString(scope:: String()..AppendF("Ln {0}", lineAndColumn.mLine + 1), mWidth - 160, 2);
+			g.DrawString(scope:: String()..AppendF("Col {0}", lineAndColumn.mColumn + 1), mWidth - 80, 2);
 		}
 	}
 }
